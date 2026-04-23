@@ -17,6 +17,7 @@
         .btn-primary { background: var(--primary-color); color: white; width: 100%; margin-top: 10px; }
         .btn-secondary { background: #e4e6eb; color: #050505; width: 100%; margin-top: 5px; }
         .btn-success { background: var(--success-color); color: white; }
+        .btn-danger { background: #f02849; color: white; }
         
         /* Inline Buttons cho list Online */
         .btn-add { background: #e7f3ff; color: var(--primary-color); padding: 3px 8px; font-size: 11px; border-radius: 4px; }
@@ -82,7 +83,11 @@
                 <div class="chat-header">
                     <div>
                         <span id="current-room-name" style="font-weight: bold; font-size: 1.1em;">Đang tải...</span>
-                        <div id="admin-notice" style="display: none; color: #e67e22; font-size: 11px; font-weight: bold; margin-top: 4px;">👑 Trưởng nhóm</div>
+                        
+                        <div id="admin-notice" style="display: none; align-items: center; gap: 10px; margin-top: 5px;">
+                            <span style="color: #e67e22; font-size: 11px; font-weight: bold;">👑 Trưởng nhóm</span>
+                            <button class="btn-danger" style="padding: 3px 8px; font-size: 11px; border-radius: 4px;" onclick="deleteCurrentGroup()">Giải tán nhóm</button>
+                        </div>
                     </div>
                     <button class="btn-secondary" style="padding: 5px 12px; font-size: 12px;" onclick="handleLogout()">Thoát</button>
                 </div>
@@ -169,16 +174,48 @@
         });
     }
 
+    // TÍNH NĂNG XÓA NHÓM DÀNH CHO TRƯỞNG NHÓM
+    async function deleteCurrentGroup() {
+        if (currentRoomId === 'global') return;
+        if (currentAdminId !== auth.currentUser.uid) return alert("Chỉ Trưởng nhóm mới có quyền này!");
+        
+        if (!confirm(`Bạn có CHẮC CHẮN muốn giải tán nhóm này không?\nToàn bộ tin nhắn và thành viên sẽ bị xóa vĩnh viễn!`)) return;
+        
+        try {
+            // Xóa dữ liệu thông tin nhóm
+            await db.ref(`groups/${currentRoomId}`).remove();
+            
+            // Xóa toàn bộ tin nhắn của nhóm đó
+            await db.ref(`messages/${currentRoomId}`).remove();
+            
+            alert("Đã giải tán nhóm thành công!");
+            
+            // Tự động chuyển về Phòng chung sau khi xóa
+            switchRoom('global', '🌐 Phòng chung', null);
+        } catch (e) {
+            alert("Lỗi: " + e.message);
+        }
+    }
+
     function loadGroups() {
         db.ref('groups').on('value', snapshot => {
             const container = document.getElementById('group-list');
             container.innerHTML = `<div class="list-item ${currentRoomId==='global'?'active-item':''}" onclick="switchRoom('global', '🌐 Phòng chung', null)">🌐 Phòng chung</div>`;
+            
+            let groupStillExists = false;
+
             snapshot.forEach(child => {
                 const g = child.val();
                 if (g.members && g.members[auth.currentUser.uid]) {
                     container.innerHTML += `<div class="list-item ${currentRoomId===child.key?'active-item':''}" onclick="switchRoom('${child.key}', '📁 ${g.name}', '${g.admin}')">📁 ${g.name}</div>`;
+                    if (currentRoomId === child.key) groupStillExists = true;
                 }
             });
+
+            // Nếu nhóm đang chat bị xóa bởi admin (hoặc bị kick), tự động đá về phòng chung
+            if (currentRoomId !== 'global' && !groupStillExists) {
+                switchRoom('global', '🌐 Phòng chung', null);
+            }
         });
     }
 
@@ -187,8 +224,9 @@
         currentAdminId = adminId;
         document.getElementById('current-room-name').innerText = name;
         
-        // Hiện thông báo Trưởng nhóm
-        document.getElementById('admin-notice').style.display = (adminId === auth.currentUser.uid) ? 'block' : 'none';
+        // Hiện khu vực Trưởng nhóm (có nút Giải tán nhóm)
+        const isGroupAndAdmin = (id !== 'global' && adminId === auth.currentUser.uid);
+        document.getElementById('admin-notice').style.display = isGroupAndAdmin ? 'flex' : 'none';
         
         loadMessages();
         renderOnlineList(); 
