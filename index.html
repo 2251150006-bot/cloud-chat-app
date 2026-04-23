@@ -18,6 +18,8 @@
         .btn-secondary { background: #e4e6eb; color: #050505; width: 100%; margin-top: 5px; }
         .btn-success { background: var(--success-color); color: white; }
         .btn-danger { background: #f02849; color: white; }
+        .btn-leave { background: #fee2e2; color: #ef4444; border: 1px solid #ef4444; }
+        .btn-leave:hover { background: #ef4444; color: white; }
         
         /* Inline Buttons cho list Online */
         .btn-add { background: #e7f3ff; color: var(--primary-color); padding: 3px 8px; font-size: 11px; border-radius: 4px; }
@@ -89,7 +91,10 @@
                             <button class="btn-danger" style="padding: 3px 8px; font-size: 11px; border-radius: 4px;" onclick="deleteCurrentGroup()">Giải tán nhóm</button>
                         </div>
                     </div>
-                    <button class="btn-secondary" style="padding: 5px 12px; font-size: 12px;" onclick="handleLogout()">Thoát</button>
+                    <div style="display: flex; gap: 8px;">
+                        <button id="btn-leave-group" class="btn-leave" style="display: none; padding: 5px 12px; font-size: 12px; border-radius: 6px;" onclick="leaveCurrentGroup()">Rời nhóm</button>
+                        <button class="btn-secondary" style="padding: 5px 12px; font-size: 12px; width: auto; margin: 0;" onclick="handleLogout()">Đăng xuất</button>
+                    </div>
                 </div>
                 <div id="message-list"></div>
                 <div class="input-area">
@@ -174,6 +179,20 @@
         });
     }
 
+    // TÍNH NĂNG RỜI NHÓM CHO THÀNH VIÊN
+    async function leaveCurrentGroup() {
+        if (currentRoomId === 'global') return;
+        if (!confirm(`Bạn có chắc chắn muốn rời khỏi nhóm này không?`)) return;
+        
+        try {
+            await db.ref(`groups/${currentRoomId}/members/${auth.currentUser.uid}`).remove();
+            alert("Đã rời nhóm thành công!");
+            switchRoom('global', '🌐 Phòng chung', null);
+        } catch (e) {
+            alert("Lỗi: " + e.message);
+        }
+    }
+
     // TÍNH NĂNG XÓA NHÓM DÀNH CHO TRƯỞNG NHÓM
     async function deleteCurrentGroup() {
         if (currentRoomId === 'global') return;
@@ -182,15 +201,9 @@
         if (!confirm(`Bạn có CHẮC CHẮN muốn giải tán nhóm này không?\nToàn bộ tin nhắn và thành viên sẽ bị xóa vĩnh viễn!`)) return;
         
         try {
-            // Xóa dữ liệu thông tin nhóm
             await db.ref(`groups/${currentRoomId}`).remove();
-            
-            // Xóa toàn bộ tin nhắn của nhóm đó
             await db.ref(`messages/${currentRoomId}`).remove();
-            
             alert("Đã giải tán nhóm thành công!");
-            
-            // Tự động chuyển về Phòng chung sau khi xóa
             switchRoom('global', '🌐 Phòng chung', null);
         } catch (e) {
             alert("Lỗi: " + e.message);
@@ -212,7 +225,7 @@
                 }
             });
 
-            // Nếu nhóm đang chat bị xóa bởi admin (hoặc bị kick), tự động đá về phòng chung
+            // Nếu bị kick hoặc tự rời nhóm, tự động về phòng chung
             if (currentRoomId !== 'global' && !groupStillExists) {
                 switchRoom('global', '🌐 Phòng chung', null);
             }
@@ -224,9 +237,12 @@
         currentAdminId = adminId;
         document.getElementById('current-room-name').innerText = name;
         
-        // Hiện khu vực Trưởng nhóm (có nút Giải tán nhóm)
-        const isGroupAndAdmin = (id !== 'global' && adminId === auth.currentUser.uid);
-        document.getElementById('admin-notice').style.display = isGroupAndAdmin ? 'flex' : 'none';
+        const isGroup = id !== 'global';
+        const iAmAdmin = adminId === auth.currentUser.uid;
+        
+        // Cập nhật giao diện thanh menu trên cùng
+        document.getElementById('admin-notice').style.display = (isGroup && iAmAdmin) ? 'flex' : 'none';
+        document.getElementById('btn-leave-group').style.display = (isGroup && !iAmAdmin) ? 'block' : 'none';
         
         loadMessages();
         renderOnlineList(); 
